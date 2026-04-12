@@ -33,6 +33,11 @@ export namespace SimulationTypes {
     address: string;
     countryCode?: string;
     vatPayer: boolean;
+    nrRegCom?: string;
+    streetName?: string;
+    streetNumber?: string;
+    locality?: string;
+    countyCode?: string;
   }
 
   export interface IdentityProfile {
@@ -44,6 +49,7 @@ export namespace SimulationTypes {
 
   export interface SimulationConfig {
     latencyMs: number;
+    processingDelayMs: number;
     errorRate: number;
     rateLimitMode: RateLimitMode;
     rateLimitWindowMs: number;
@@ -63,6 +69,11 @@ export namespace SimulationTypes {
     address: string;
     countryCode?: string;
     vatPayer?: boolean;
+    nrRegCom?: string;
+    streetName?: string;
+    streetNumber?: string;
+    locality?: string;
+    countyCode?: string;
   }
 
   export interface SeedPresetSummary {
@@ -107,6 +118,18 @@ export namespace SimulationTypes {
       dataInregistrare: string;
       dataAnulare: string | null;
     };
+    adresa_sediu_social: {
+      sdenumire_Strada: string;
+      snumar_Strada: string;
+      sdenumire_Localitate: string;
+      scod_Localitate: string;
+      sdenumire_Judet: string;
+      scod_JudetAuto: string;
+      scod_Judet: string;
+      stara: string;
+      sdetalii_Adresa: string;
+      scod_Postal: string;
+    };
   }
 
   export interface VatLookupResponse {
@@ -116,17 +139,17 @@ export namespace SimulationTypes {
     notFound: string[];
   }
 
+  /**
+   * ANAF-standard message list entry fields.
+   * Only these fields are returned by the real ANAF API in listaMesaje responses.
+   */
   export interface MessageListEntry {
     id: string;
     data_creare: string;
-    creation_date: string;
-    cif_emitent: string;
-    cif_beneficiar: string;
     cif: string;
     tip: string;
+    id_solicitare: string;
     detalii: string;
-    suma: number;
-    currency: string;
   }
 
   export interface MessageListResponse {
@@ -135,7 +158,55 @@ export namespace SimulationTypes {
     mesaje: MessageListEntry[];
   }
 
+  export type UploadStandard = 'UBL' | 'CII' | 'CN' | 'RASP';
+
+  export type UploadStatus =
+    | 'in prelucrare'
+    | 'ok'
+    | 'nok'
+    | 'XML cu erori nepreluat de sistem';
+
+  export interface UploadedInvoiceRecord {
+    indexIncarcare: string;
+    cif: string;
+    standard: UploadStandard;
+    xmlContent: string;
+    uploadedAt: Date;
+    processingCompleteAt: Date;
+    messageId: string | null;
+    status: UploadStatus;
+    errors: string[];
+    extern?: string;
+    autofactura?: string;
+    executare?: string;
+  }
+
+  /**
+   * ANAF paginated message list response — matches the real ANAF envelope.
+   * Uses `titlu`/`serial`/`cui`/`eroare` instead of `cod`/`message`.
+   */
+  export interface MessageListPaginationResponse {
+    titlu: string;
+    serial: string;
+    cui: string;
+    eroare: string | null;
+    mesaje: MessageListEntry[];
+    numar_inregistrari_in_pagina: number;
+    numar_total_inregistrari_per_pagina: number;
+    numar_total_inregistrari: number;
+    numar_total_pagini: number;
+    index_pagina_curenta: number;
+  }
+
+  /**
+   * Internal storage model — extends ANAF entry with routing, financial,
+   * and metadata fields used for filtering, graph building, and ZIP generation.
+   */
   export interface StoredInvoiceMessage extends MessageListEntry {
+    cif_emitent: string;
+    cif_beneficiar: string;
+    suma: number;
+    currency: string;
     issueDate: string;
     payableAmount: number;
     supplier: CompanyProfile;

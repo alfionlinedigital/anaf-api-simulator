@@ -13,13 +13,18 @@ import { Response } from 'express';
 import {
   DescarcareQueryDto,
   ListaMesajeFacturaQueryDto,
+  ListaMesajePaginatieFacturaQueryDto,
+  StareMesajQueryDto,
 } from './messages.request.dto';
 import { SimulationTypes } from '../../domain/simulation.types';
 import {
   GetEfacturaArchiveQuery,
+  GetUploadStatusQuery,
   ListEfacturaMessagesQuery,
+  ListMessagesPaginatedQuery,
 } from '../../application/messages/messages.queries';
 import { ValidateAuthorizationHeaderQuery } from '../../application/oauth/oauth.queries';
+import { UploadStatusResult } from '../../application/messages/messages.handlers';
 import { AccessTokenValidationResult } from '../../application/services/oauth-token.service';
 import {
   MockIdentityRegistryService,
@@ -98,7 +103,7 @@ export class MessagesQueryHttpController {
       });
     }
 
-    this.assertOwnershipAccess(auth, archiveResult.message.cif_beneficiar);
+    this.assertDownloadAccess(auth, archiveResult.message);
 
     response.setHeader('Content-Type', 'application/zip');
     response.setHeader(
@@ -128,6 +133,163 @@ export class MessagesQueryHttpController {
     }
 
     return validation;
+  }
+
+  @Get('listaMesajePaginatieFactura')
+  async listMessagesPaginated(
+    @Query() query: ListaMesajePaginatieFacturaQueryDto,
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('x-simulate-wrong-certificate') wrongCertificateHeader?: string,
+  ): Promise<SimulationTypes.MessageListPaginationResponse> {
+    const auth = await this.assertAuthorized(authorizationHeader);
+    this.assertOwnershipAccess(auth, query.cif);
+
+    if (wrongCertificateHeader?.toLowerCase() === 'true') {
+      throw new ForbiddenException({
+        code: 'ANAF_CUI_MISMATCH',
+        message:
+          'ANAF_CUI_MISMATCH: The digital certificate does not match the requested CIF.',
+      });
+    }
+
+    return this.queryBus.execute(
+      new ListMessagesPaginatedQuery(
+        query.cif,
+        query.startTime,
+        query.endTime,
+        query.pagina,
+        query.filtru,
+      ),
+    );
+  }
+
+  @Get('stareMesaj')
+  async getMessageState(
+    @Query() query: StareMesajQueryDto,
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Headers('x-simulate-invalid-xml') simulateInvalidXml?: string,
+    @Headers('x-simulate-nok') simulateNok?: string,
+    @Res() response?: Response,
+  ): Promise<void> {
+    await this.assertAuthorized(authorizationHeader);
+
+    if (simulateInvalidXml?.toLowerCase() === 'true') {
+      const xml = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<header xmlns="mfp:anaf:dgti:efactura:stareMesajFactura:v1"',
+        '  stare="XML cu erori nepreluat de sistem">',
+        '  <Errors errorMessage="Simulated XML validation failure."/>',
+        '</header>',
+      ].join('\n');
+      response!.setHeader('Content-Type', 'application/xml');
+      response!.status(200).send(xml);
+      return;
+    }
+
+    if (simulateNok?.toLowerCase() === 'true') {
+      // Real ANAF includes id_descarcare for nok (ZIP contains error details)
+      const xml = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<header xmlns="mfp:anaf:dgti:efactura:stareMesajFactura:v1"',
+        `  stare="nok"`,
+        `  id_descarcare="sim-nok-${Date.now()}">`,
+        '  <Errors errorMessage="Simulated processing failure."/>',
+        '</header>',
+      ].join('\n');
+      response!.setHeader('Content-Type', 'application/xml');
+      response!.status(200).send(xml);
+      return;
+    }
+
+    const result: UploadStatusResult | undefined = await this.queryBus.execute(
+      new GetUploadStatusQuery(query.id_incarcare),
+    );
+
+    if (!result) {
+      // Real ANAF always returns HTTP 200 — status conveyed via XML stare attribute
+      response!.setHeader('Content-Type', 'application/xml');
+      response!.status(200).send(
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+        '<header xmlns="mfp:anaf:dgti:efactura:stareMesajFactura:v1"\n' +
+        '  stare="in prelucrare"/>',
+      );
+      return;
+    }
+
+    const errorsXml = result.errors.length > 0
+      ? result.errors.map((e) => `  <Errors errorMessage="${this.escapeXmlAttr(e)}"/>`).join('\n') + '\n'
+      : '';
+
+    const idDescarcareAttr = result.idDescarcare
+      ? `\n  id_descarcare="${result.idDescarcare}"`
+      : '';
+
+    const closingTag = errorsXml ? '>' : '/>';
+
+    const xml = [
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+      `<header xmlns="mfp:anaf:dgti:efactura:stareMesajFactura:v1"`,
+      `  stare="${result.stare}"${idDescarcareAttr}${closingTag}`,
+      errorsXml ? `${errorsXml}</header>` : '',
+    ].filter(Boolean).join('\n');
+
+    response!.setHeader('Content-Type', 'application/xml');
+    response!.status(200).send(xml);
+  }
+
+  private escapeXmlAttr(input: string): string {
+    return input.replace(/[<>&"']/g, (char) => {
+      switch (char) {
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '&': return '&amp;';
+        case '"': return '&quot;';
+        case "'": return '&apos;';
+        default: return char;
+      }
+    });
+  }
+
+  /**
+   * Enforces download access: user must own either the beneficiary or emitter CIF.
+   */
+  private assertDownloadAccess(
+    auth: AccessTokenValidationResult,
+    message: SimulationTypes.StoredInvoiceMessage,
+  ): void {
+    const strictMode =
+      this.simulationEngine.getConfig().strictOwnershipValidation;
+    if (!strictMode) {
+      return;
+    }
+
+    const identityId = auth.identityId?.trim();
+    if (!identityId) {
+      const normalizedCif = this.simulationEngine.normalizeCui(message.cif_beneficiar).ro;
+      throw new ForbiddenException({
+        error: 'access_denied',
+        error_description: `User is not authorized to access data for CIF ${normalizedCif}.`,
+      });
+    }
+
+    const beneficiaryCif = this.simulationEngine.normalizeCui(message.cif_beneficiar).ro;
+    const emitterCif = this.simulationEngine.normalizeCui(message.cif_emitent).ro;
+
+    const authorizedForBeneficiary = this.identityRegistry.isIdentityAuthorizedForCui(
+      identityId,
+      beneficiaryCif,
+    );
+    const authorizedForEmitter = this.identityRegistry.isIdentityAuthorizedForCui(
+      identityId,
+      emitterCif,
+    );
+
+    if (!authorizedForBeneficiary && !authorizedForEmitter) {
+      throw new ForbiddenException({
+        error: 'access_denied',
+        error_description: `User is not authorized to access data for CIF ${beneficiaryCif}.`,
+      });
+    }
   }
 
   /**

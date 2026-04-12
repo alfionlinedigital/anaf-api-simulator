@@ -112,18 +112,7 @@ export class TrafficGeneratorService implements OnModuleInit {
       .sort(
         (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
       )
-      .map((message) => ({
-        id: message.id,
-        data_creare: message.data_creare,
-        creation_date: message.creation_date,
-        cif_emitent: message.cif_emitent,
-        cif_beneficiar: message.cif_beneficiar,
-        cif: message.cif,
-        tip: message.tip,
-        detalii: message.detalii,
-        suma: message.suma,
-        currency: message.currency,
-      }));
+      .map((message) => this.toAnafMessageEntry(message));
   }
 
   /**
@@ -145,6 +134,87 @@ export class TrafficGeneratorService implements OnModuleInit {
    */
   async listAllMessages(): Promise<SimulationTypes.StoredInvoiceMessage[]> {
     return this.messageStore.listAll();
+  }
+
+  /**
+   * Creates and persists a StoredInvoiceMessage from an upload operation.
+   */
+  async createMessageFromUpload(
+    supplier: SimulationTypes.CompanyProfile,
+    customer: SimulationTypes.CompanyProfile,
+    amount: number,
+    xmlContent: string,
+    idSolicitare?: string,
+  ): Promise<string> {
+    const messageId = await this.messageStore.allocateId();
+    const now = new Date();
+    const issueDate = new Date(now.getTime());
+    issueDate.setUTCDate(issueDate.getUTCDate() - (1 + Math.floor(Math.random() * 4)));
+
+    const message: SimulationTypes.StoredInvoiceMessage = {
+      id: messageId,
+      data_creare: this.formatAnafDate(now),
+      cif: supplier.numericCui,
+      tip: 'FACTURA TRIMISA',
+      id_solicitare: idSolicitare ?? messageId,
+      detalii: `Factura incarcata de ${supplier.name} catre ${customer.name}`,
+      cif_emitent: supplier.numericCui,
+      cif_beneficiar: customer.numericCui,
+      suma: amount,
+      currency: 'RON',
+      issueDate: issueDate.toISOString().slice(0, 10),
+      payableAmount: amount,
+      supplier,
+      customer,
+      lineDescription: 'Factura incarcata prin upload',
+      createdAt: now,
+    };
+
+    await this.messageStore.save(message);
+    return messageId;
+  }
+
+  /**
+   * Creates and persists an error message for nok upload results.
+   * Real ANAF includes id_descarcare for nok — the ZIP contains error details.
+   */
+  async createErrorMessage(
+    cif: string,
+    errorDetails: string,
+  ): Promise<string> {
+    const messageId = await this.messageStore.allocateId();
+    const now = new Date();
+    const dummyProfile: SimulationTypes.CompanyProfile = {
+      cui: cif,
+      numericCui: this.simulationEngine.normalizeCui(cif).numeric,
+      name: 'Unknown',
+      city: '',
+      county: '',
+      address: '',
+      vatPayer: false,
+    };
+
+    const message: SimulationTypes.StoredInvoiceMessage = {
+      id: messageId,
+      data_creare: this.formatAnafDate(now),
+      cif: dummyProfile.numericCui,
+      tip: 'ERORI FACTURA',
+      id_solicitare: messageId,
+      detalii: errorDetails,
+      cif_emitent: dummyProfile.numericCui,
+      cif_beneficiar: dummyProfile.numericCui,
+      suma: 0,
+      currency: 'RON',
+      issueDate: now.toISOString().slice(0, 10),
+      payableAmount: 0,
+      supplier: dummyProfile,
+      customer: dummyProfile,
+      lineDescription: errorDetails,
+      createdAt: now,
+    };
+
+    await this.messageStore.save(message);
+    return messageId;
   }
 
   /**
@@ -280,6 +350,78 @@ export class TrafficGeneratorService implements OnModuleInit {
   }
 
   /**
+   * Lists messages with time-range filtering and pagination.
+   */
+  async listMessagesPaginated(
+    rawCui: string,
+    startTimeMs: number,
+    endTimeMs: number,
+    page: number,
+    filtru?: string,
+  ): Promise<SimulationTypes.MessageListPaginationResponse> {
+    const normalized = this.simulationEngine.normalizeCui(rawCui);
+    const filter = this.normalizeFilter(filtru);
+    const startThreshold = new Date(startTimeMs);
+    const endThreshold = new Date(endTimeMs);
+    const pageSize = 50;
+
+    const allMessages =
+      filter === 'P'
+        ? await this.messageStore.listForBeneficiary(normalized.numeric)
+        : await this.messageStore.listAll();
+
+    const filtered = allMessages
+      .filter(
+        (message) =>
+          message.createdAt >= startThreshold &&
+          message.createdAt <= endThreshold,
+      )
+      .filter((message) =>
+        this.matchesFilter(message, normalized.numeric, filter),
+      )
+      .sort(
+        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+      );
+
+    const totalRecords = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+    const currentPage = Math.min(Math.max(1, page), totalPages);
+    const startIndex = (currentPage - 1) * pageSize;
+    const pageSlice = filtered.slice(startIndex, startIndex + pageSize);
+
+    const mesaje = pageSlice.map((message) => this.toAnafMessageEntry(message));
+    const normalizedCif = this.simulationEngine.normalizeCui(rawCui);
+
+    if (totalRecords === 0) {
+      return {
+        titlu: `Lista Mesaje disponibile in intervalul ${startTimeMs} - ${endTimeMs}`,
+        serial: 'simulator',
+        cui: normalizedCif.ro,
+        eroare: null,
+        mesaje: [],
+        numar_inregistrari_in_pagina: 0,
+        numar_total_inregistrari_per_pagina: pageSize,
+        numar_total_inregistrari: 0,
+        numar_total_pagini: 0,
+        index_pagina_curenta: currentPage,
+      };
+    }
+
+    return {
+      titlu: `Lista Mesaje disponibile in intervalul ${startTimeMs} - ${endTimeMs}`,
+      serial: 'simulator',
+      cui: normalizedCif.ro,
+      eroare: null,
+      mesaje,
+      numar_inregistrari_in_pagina: mesaje.length,
+      numar_total_inregistrari_per_pagina: pageSize,
+      numar_total_inregistrari: totalRecords,
+      numar_total_pagini: totalPages,
+      index_pagina_curenta: currentPage,
+    };
+  }
+
+  /**
    * Adds optional synthetic near-real-time traffic for legacy scenarios.
    *
    * @param cifBeneficiar Beneficiary numeric CUI.
@@ -341,13 +483,13 @@ export class TrafficGeneratorService implements OnModuleInit {
 
     return {
       id: messageId,
-      data_creare: createdAt.toISOString(),
-      creation_date: createdAt.toISOString(),
-      cif_emitent: supplier.numericCui,
-      cif_beneficiar: customer.numericCui,
+      data_creare: this.formatAnafDate(createdAt),
       cif: supplier.numericCui,
       tip: 'FACTURA PRIMITA',
+      id_solicitare: messageId,
       detalii: `Factura de la ${supplier.name} catre ${customer.name}`,
+      cif_emitent: supplier.numericCui,
+      cif_beneficiar: customer.numericCui,
       suma: amount,
       currency: 'RON',
       issueDate: issueDateTime.toISOString().slice(0, 10),
@@ -592,13 +734,13 @@ export class TrafficGeneratorService implements OnModuleInit {
 
     return {
       id: messageId,
-      data_creare: createdAt.toISOString(),
-      creation_date: createdAt.toISOString(),
-      cif_emitent: supplier.numericCui,
-      cif_beneficiar: customer.numericCui,
+      data_creare: this.formatAnafDate(createdAt),
       cif: supplier.numericCui,
       tip: template.tip,
+      id_solicitare: messageId,
       detalii: `${template.lineDescription} | ${supplier.name} -> ${customer.name}`,
+      cif_emitent: supplier.numericCui,
+      cif_beneficiar: customer.numericCui,
       suma: template.amount,
       currency: template.currency,
       issueDate: issueDate.toISOString().slice(0, 10),
@@ -777,6 +919,37 @@ export class TrafficGeneratorService implements OnModuleInit {
     }
 
     return 'anaf-core';
+  }
+
+  /**
+   * Maps a stored message to the ANAF-standard response entry.
+   * Only includes fields that the real ANAF API returns.
+   */
+  private toAnafMessageEntry(
+    message: SimulationTypes.StoredInvoiceMessage,
+  ): SimulationTypes.MessageListEntry {
+    return {
+      id: message.id,
+      data_creare: message.data_creare,
+      cif: message.cif,
+      tip: message.tip,
+      id_solicitare: message.id_solicitare,
+      detalii: message.detalii,
+    };
+  }
+
+  /**
+   * Formats a Date as YYYYMMDDHHmm — the format used by real ANAF in data_creare fields.
+   */
+  private formatAnafDate(date: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return (
+      `${date.getFullYear()}` +
+      `${pad(date.getMonth() + 1)}` +
+      `${pad(date.getDate())}` +
+      `${pad(date.getHours())}` +
+      `${pad(date.getMinutes())}`
+    );
   }
 
   /**

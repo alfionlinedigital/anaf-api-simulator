@@ -41,7 +41,7 @@ function buildStoredMessage(
   return {
     id,
     data_creare: createdAt.toISOString(),
-    creation_date: createdAt.toISOString(),
+    id_solicitare: id ?? 'SIM-777',
     cif_emitent: supplier.numericCui,
     cif_beneficiar: customer.numericCui,
     cif: supplier.numericCui,
@@ -94,15 +94,14 @@ describe('TrafficGeneratorService', () => {
 
     const incoming = await service.listMessages('RO10000008', 40, 'P');
     expect(incoming.length).toBeGreaterThan(0);
-    expect(
-      incoming.every((message) => message.cif_beneficiar === '10000008'),
-    ).toBe(true);
+    // P filter returns invoices where the queried CIF is the beneficiary.
+    // The ANAF `cif` field is the emitter, so it should NOT be the queried CIF.
+    expect(incoming.every((m) => m.cif !== '10000008')).toBe(true);
 
     const outgoing = await service.listMessages('RO10000008', 40, 'T');
     expect(outgoing.length).toBeGreaterThan(0);
-    expect(
-      outgoing.every((message) => message.cif_emitent === '10000008'),
-    ).toBe(true);
+    // T filter returns invoices where the queried CIF is the emitter (cif field).
+    expect(outgoing.every((m) => m.cif === '10000008')).toBe(true);
 
     const errorMessages = await service.listMessages('RO10000008', 40, 'E');
     expect(errorMessages.length).toBeGreaterThan(0);
@@ -123,9 +122,8 @@ describe('TrafficGeneratorService', () => {
     ).toBe(true);
 
     const fallback = await service.listMessages('RO10000008', 40, 'unknown');
-    expect(
-      fallback.every((message) => message.cif_beneficiar === '10000008'),
-    ).toBe(true);
+    // Unknown filter falls back to P (incoming) — same as incoming check
+    expect(fallback.every((m) => m.cif !== '10000008')).toBe(true);
   });
 
   it('filters out old messages based on lookback window and sorts by newest first', async () => {
@@ -229,5 +227,108 @@ describe('TrafficGeneratorService', () => {
     const noSeedService = new TrafficGeneratorService(localEngine, noSeedStore);
     await noSeedService.onModuleInit();
     expect(await noSeedStore.listAll()).toHaveLength(0);
+  });
+
+  describe('createMessageFromUpload', () => {
+    it('creates a message with correct supplier and customer CIFs', async () => {
+      const supplier = simulationEngine.getCompany('RO10079193')!;
+      const customer = simulationEngine.getCompany('RO10000008')!;
+
+      const messageId = await service.createMessageFromUpload(
+        supplier,
+        customer,
+        1500.5,
+        '<Invoice/>',
+      );
+
+      expect(typeof messageId).toBe('string');
+      expect(messageId.length).toBeGreaterThan(0);
+
+      const stored = await service.getStoredMessageById(messageId);
+
+      expect(stored).toBeDefined();
+      expect(stored?.cif_emitent).toBe(supplier.numericCui);
+      expect(stored?.cif_beneficiar).toBe(customer.numericCui);
+      expect(stored?.suma).toBe(1500.5);
+      expect(stored?.tip).toBe('FACTURA TRIMISA');
+    });
+  });
+
+  describe('listMessagesPaginated', () => {
+    it('returns correct pagination metadata', async () => {
+      const supplier = simulationEngine.getCompany('RO10079193')!;
+      const customer = simulationEngine.getCompany('RO10000008')!;
+
+      const now = Date.now();
+      const createdAt = new Date(now - 60_000);
+
+      await messageStore.save(
+        buildStoredMessage('PAG-1', supplier, customer, 100, createdAt),
+      );
+      await messageStore.save(
+        buildStoredMessage('PAG-2', supplier, customer, 200, createdAt),
+      );
+
+      const result = await service.listMessagesPaginated(
+        'RO10000008',
+        now - 3_600_000,
+        now,
+        1,
+        'P',
+      );
+
+      expect(result.eroare).toBeNull();
+      expect(result.titlu).toBeDefined();
+      expect(result.numar_total_inregistrari).toBe(2);
+      expect(result.numar_total_pagini).toBe(1);
+      expect(result.index_pagina_curenta).toBe(1);
+      expect(result.numar_inregistrari_in_pagina).toBe(2);
+      expect(result.mesaje).toHaveLength(2);
+    });
+
+    it('filters by time range', async () => {
+      const supplier = simulationEngine.getCompany('RO10079193')!;
+      const customer = simulationEngine.getCompany('RO10000008')!;
+
+      const now = Date.now();
+      const insideRange = new Date(now - 60_000);
+      const outsideRange = new Date(now - 7_200_000);
+
+      await messageStore.save(
+        buildStoredMessage('TR-IN', supplier, customer, 100, insideRange),
+      );
+      await messageStore.save(
+        buildStoredMessage('TR-OUT', supplier, customer, 200, outsideRange),
+      );
+
+      const result = await service.listMessagesPaginated(
+        'RO10000008',
+        now - 3_600_000,
+        now,
+        1,
+        'P',
+      );
+
+      expect(result.numar_total_inregistrari).toBe(1);
+      expect(result.mesaje[0]?.id).toBe('TR-IN');
+    });
+
+    it('returns empty result with descriptive message when no messages match', async () => {
+      const now = Date.now();
+
+      const result = await service.listMessagesPaginated(
+        'RO10000008',
+        now - 3_600_000,
+        now,
+        1,
+        'P',
+      );
+
+      expect(result.eroare).toBeNull();
+      expect(result.titlu).toContain('Lista Mesaje');
+      expect(result.mesaje).toHaveLength(0);
+      expect(result.numar_total_inregistrari).toBe(0);
+      expect(result.numar_total_pagini).toBe(0);
+    });
   });
 });
