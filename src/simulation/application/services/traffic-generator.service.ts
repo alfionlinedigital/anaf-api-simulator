@@ -145,12 +145,15 @@ export class TrafficGeneratorService implements OnModuleInit {
 
   /**
    * Creates and persists a StoredInvoiceMessage from an upload operation.
+   *
+   * @param indexIncarcare Upload index the message answers; ANAF lists it as `id_solicitare`.
    */
   async createMessageFromUpload(
     supplier: SimulationTypes.CompanyProfile,
     customer: SimulationTypes.CompanyProfile,
     amount: number,
     xmlContent: string,
+    indexIncarcare: string,
   ): Promise<string> {
     const messageId = await this.messageStore.allocateId();
     const now = new Date();
@@ -164,7 +167,7 @@ export class TrafficGeneratorService implements OnModuleInit {
       cif_emitent: supplier.numericCui,
       cif_beneficiar: customer.numericCui,
       cif: supplier.numericCui,
-      id_solicitare: messageId,
+      id_solicitare: indexIncarcare,
       tip: 'FACTURA TRIMISA',
       detalii: `Factura incarcata de ${supplier.name} catre ${customer.name}`,
       suma: amount,

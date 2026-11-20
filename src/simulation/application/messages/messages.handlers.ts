@@ -280,6 +280,7 @@ export class GetUploadStatusHandler implements IQueryHandler<
       customer,
       amount,
       record.xmlContent,
+      record.indexIncarcare,
     );
 
     record.status = 'ok';

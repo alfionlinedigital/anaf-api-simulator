@@ -242,6 +242,7 @@ describe('TrafficGeneratorService', () => {
         customer,
         1500.5,
         '<Invoice/>',
+        '5000000123',
       );
 
       expect(typeof messageId).toBe('string');
@@ -254,6 +255,7 @@ describe('TrafficGeneratorService', () => {
       expect(stored?.cif_beneficiar).toBe(customer.numericCui);
       expect(stored?.suma).toBe(1500.5);
       expect(stored?.tip).toBe('FACTURA TRIMISA');
+      expect(stored?.id_solicitare).toBe('5000000123');
     });
   });
 

@@ -583,6 +583,20 @@ describe('AnafMockServer (e2e)', () => {
     const entries = zip.getEntries().map((entry) => entry.entryName);
     expect(entries).toContain('factura.xml');
     expect(entries).toContain('semnatura.xml');
+
+    // Step 4: The listed message names the upload it answers in id_solicitare
+    const now = Date.now();
+    const listResponse = await request(app.getHttpServer())
+      .get(
+        `/prod/FCTEL/rest/listaMesajePaginatieFactura?cif=10000008&startTime=${now - 60_000}&endTime=${now}&pagina=1&filtru=T`,
+      )
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    const listed = listResponse.body.mesaje.find(
+      (message: { id: string }) => message.id === idDescarcare,
+    );
+    expect(listed?.id_solicitare).toBe(indexIncarcare);
   });
 
   it('rejects upload without a bearer token with HTTP 401', async () => {
