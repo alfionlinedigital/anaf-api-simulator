@@ -212,5 +212,40 @@ describe('SimulationEngineService', () => {
     expect(record.date_generale.cui).toBe(10000008);
     expect(record.date_generale.denumire).toContain('SRL');
     expect(record.inregistrare_scop_Tva.data_inceput_ScpTVA).toBe('2026-04-10');
+    expect(record.adresa_sediu_social.sdenumire_Localitate).toBe(company.city);
+    expect(record.adresa_sediu_social.sdenumire_Judet).toBe(company.county);
+    expect(record.adresa_sediu_social.scod_Postal).toBe(
+      record.date_generale.codPostal,
+    );
+  });
+
+  it('builds the registered office address from the seeded company', async () => {
+    const service = buildService();
+    await service.onModuleInit();
+
+    const company = service.seedCompany({
+      cui: 'RO10474788',
+      name: 'ADDRESS TEST SRL',
+      city: 'Cluj-Napoca',
+      county: 'Cluj',
+      address: 'Str. Memorandumului 28, Cluj-Napoca',
+      nrRegCom: 'J12/345/2020',
+      streetName: 'Str. Memorandumului',
+      streetNumber: '28',
+      locality: 'Mun. Cluj-Napoca',
+      countyCode: 'CJ',
+    });
+
+    const record = service.buildVatRecord(company, '2026-04-10');
+
+    expect(record.date_generale.nrRegCom).toBe('J12/345/2020');
+    expect(record.adresa_sediu_social).toMatchObject({
+      sdenumire_Strada: 'Str. Memorandumului',
+      snumar_Strada: '28',
+      sdenumire_Localitate: 'Mun. Cluj-Napoca',
+      sdenumire_Judet: 'Cluj',
+      scod_JudetAuto: 'CJ',
+      stara: 'RO',
+    });
   });
 });

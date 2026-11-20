@@ -68,6 +68,42 @@ export class SeedCompanyDto {
   @IsOptional()
   @IsBoolean()
   vatPayer?: boolean;
+
+  /**
+   * Trade register number (e.g. "J04/1234/2019"). Generated when omitted.
+   */
+  @IsOptional()
+  @IsString()
+  nrRegCom?: string;
+
+  /**
+   * Street name of the registered office (`adresa_sediu_social.sdenumire_Strada`).
+   */
+  @IsOptional()
+  @IsString()
+  streetName?: string;
+
+  /**
+   * Street number of the registered office (`adresa_sediu_social.snumar_Strada`).
+   */
+  @IsOptional()
+  @IsString()
+  streetNumber?: string;
+
+  /**
+   * Locality of the registered office (`adresa_sediu_social.sdenumire_Localitate`). Defaults to `city`.
+   */
+  @IsOptional()
+  @IsString()
+  locality?: string;
+
+  /**
+   * County plate code of the registered office (`adresa_sediu_social.scod_JudetAuto`, e.g. "B", "CJ").
+   */
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z]{1,2}$/)
+  countyCode?: string;
 }
 
 /**

@@ -182,6 +182,39 @@ describe('AnafMockServer (e2e)', () => {
     expect(response.body.found[1].date_generale.denumire).toContain('SRL');
   });
 
+  it('returns the registered office address of a seeded company in the VAT record', async () => {
+    await request(app.getHttpServer())
+      .post('/simulation/seed')
+      .send({
+        companies: [
+          {
+            cui: 'RO10474788',
+            name: 'ADDRESS TEST SRL',
+            city: 'Cluj-Napoca',
+            county: 'Cluj',
+            address: 'Str. Memorandumului 28, Cluj-Napoca',
+            streetName: 'Str. Memorandumului',
+            streetNumber: '28',
+            countyCode: 'CJ',
+          },
+        ],
+      })
+      .expect(201);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/PlatitorTvaRest/v9/tva')
+      .send([{ cui: 'RO10474788', data: '2026-04-08' }])
+      .expect(200);
+
+    expect(response.body.found[0].adresa_sediu_social).toMatchObject({
+      sdenumire_Strada: 'Str. Memorandumului',
+      snumar_Strada: '28',
+      sdenumire_Localitate: 'Cluj-Napoca',
+      sdenumire_Judet: 'Cluj',
+      scod_JudetAuto: 'CJ',
+    });
+  });
+
   it('returns official ANAF notFound payload when strict mode is enabled and none are found', async () => {
     await updateConfig({ strictVatLookup: true });
 

@@ -33,6 +33,11 @@ export namespace SimulationTypes {
     address: string;
     countryCode?: string;
     vatPayer: boolean;
+    nrRegCom?: string;
+    streetName?: string;
+    streetNumber?: string;
+    locality?: string;
+    countyCode?: string;
   }
 
   export interface IdentityProfile {
@@ -64,6 +69,11 @@ export namespace SimulationTypes {
     address: string;
     countryCode?: string;
     vatPayer?: boolean;
+    nrRegCom?: string;
+    streetName?: string;
+    streetNumber?: string;
+    locality?: string;
+    countyCode?: string;
   }
 
   export interface SeedPresetSummary {
@@ -107,6 +117,18 @@ export namespace SimulationTypes {
       statusRTVAI: boolean;
       dataInregistrare: string;
       dataAnulare: string | null;
+    };
+    adresa_sediu_social: {
+      sdenumire_Strada: string;
+      snumar_Strada: string;
+      sdenumire_Localitate: string;
+      scod_Localitate: string;
+      sdenumire_Judet: string;
+      scod_JudetAuto: string;
+      scod_Judet: string;
+      stara: string;
+      sdetalii_Adresa: string;
+      scod_Postal: string;
     };
   }
 
