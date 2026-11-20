@@ -263,8 +263,15 @@ export class GetUploadStatusHandler implements IQueryHandler<
     const supplierProfile = this.simulationEngine.getCompany(record.cif);
 
     if (!supplierProfile) {
+      // ANAF answers nok with an id_descarcare: the ZIP holds the errors found
+      const error = `CIF ${record.cif} is not registered in the simulator.`;
       record.status = 'nok';
-      record.errors = [`CIF ${record.cif} is not registered in the simulator.`];
+      record.errors = [error];
+      record.messageId = await this.trafficGenerator.createErrorMessageFromUpload(
+        record.cif,
+        record.indexIncarcare,
+        error,
+      );
       await this.uploadStore.save(record);
       return;
     }

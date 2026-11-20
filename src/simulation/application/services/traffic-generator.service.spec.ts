@@ -259,6 +259,23 @@ describe('TrafficGeneratorService', () => {
     });
   });
 
+  describe('createErrorMessageFromUpload', () => {
+    it('stores an ERORI FACTURA message answering the upload', async () => {
+      const messageId = await service.createErrorMessageFromUpload(
+        'RO10474796',
+        '5000000456',
+        'CIF RO10474796 is not registered in the simulator.',
+      );
+
+      const stored = await service.getStoredMessageById(messageId);
+
+      expect(stored?.tip).toBe('ERORI FACTURA');
+      expect(stored?.cif).toBe('10474796');
+      expect(stored?.id_solicitare).toBe('5000000456');
+      expect(stored?.detalii).toContain('id_incarcare=5000000456');
+    });
+  });
+
   describe('listMessagesPaginated', () => {
     it('returns correct pagination metadata', async () => {
       const supplier = simulationEngine.getCompany('RO10079193')!;

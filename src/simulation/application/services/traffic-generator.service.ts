@@ -185,6 +185,57 @@ export class TrafficGeneratorService implements OnModuleInit {
   }
 
   /**
+   * Creates and persists the ERORI FACTURA message ANAF issues for an upload it
+   * rejected (`nok`); its id is the `id_descarcare` stareMesaj reports.
+   *
+   * @param cif CIF the upload was made for.
+   * @param indexIncarcare Upload index the message answers; ANAF lists it as `id_solicitare`.
+   * @param errorDetails Validation errors found in the upload.
+   * @returns Identifier of the stored error message.
+   */
+  async createErrorMessageFromUpload(
+    cif: string,
+    indexIncarcare: string,
+    errorDetails: string,
+  ): Promise<string> {
+    const messageId = await this.messageStore.allocateId();
+    const now = new Date();
+    const numericCui = this.simulationEngine.normalizeCui(cif).numeric;
+    const uploader: SimulationTypes.CompanyProfile = {
+      cui: `RO${numericCui}`,
+      numericCui,
+      name: `CIF ${numericCui}`,
+      city: '',
+      county: '',
+      address: '',
+      vatPayer: false,
+    };
+
+    const message: SimulationTypes.StoredInvoiceMessage = {
+      id: messageId,
+      data_creare: now.toISOString(),
+      creation_date: now.toISOString(),
+      cif_emitent: numericCui,
+      cif_beneficiar: numericCui,
+      cif: numericCui,
+      id_solicitare: indexIncarcare,
+      tip: 'ERORI FACTURA',
+      detalii: `Erori de validare identificate la factura primita cu id_incarcare=${indexIncarcare}`,
+      suma: 0,
+      currency: 'RON',
+      issueDate: now.toISOString().slice(0, 10),
+      payableAmount: 0,
+      supplier: uploader,
+      customer: uploader,
+      lineDescription: errorDetails,
+      createdAt: now,
+    };
+
+    await this.messageStore.save(message);
+    return messageId;
+  }
+
+  /**
    * Seeds deterministic message traffic for one preset profile.
    *
    * @param preset Seed preset name.

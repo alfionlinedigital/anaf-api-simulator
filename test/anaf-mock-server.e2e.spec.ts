@@ -599,6 +599,38 @@ describe('AnafMockServer (e2e)', () => {
     expect(listed?.id_solicitare).toBe(indexIncarcare);
   });
 
+  it('reports nok with an id_descarcare whose ZIP can be downloaded', async () => {
+    await updateConfig({ strictVatLookup: true, strictOwnershipValidation: false });
+
+    const uploadResponse = await request(app.getHttpServer())
+      .post('/prod/FCTEL/rest/upload?standard=UBL&cif=RO10474796')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Content-Type', 'text/plain')
+      .send('<Invoice/>')
+      .expect(200);
+    const indexIncarcare = uploadResponse.text.match(/index_incarcare="(\d+)"/)![1];
+
+    const statusResponse = await request(app.getHttpServer())
+      .get(`/prod/FCTEL/rest/stareMesaj?id_incarcare=${indexIncarcare}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(statusResponse.text).toContain('stare="nok"');
+    const idDescarcareMatch = statusResponse.text.match(/id_descarcare="([^"]+)"/);
+    expect(idDescarcareMatch).toBeTruthy();
+
+    const downloadResponse = await request(app.getHttpServer())
+      .get(`/prod/FCTEL/rest/descarcare?id=${encodeURIComponent(idDescarcareMatch![1])}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .buffer(true)
+      .parse(binaryParser)
+      .expect(200);
+
+    expect(downloadResponse.headers['content-type']).toContain('application/zip');
+
+    await updateConfig({ strictVatLookup: false, strictOwnershipValidation: true });
+  });
+
   it('rejects upload without a bearer token with HTTP 401', async () => {
     const response = await request(app.getHttpServer())
       .post('/prod/FCTEL/rest/upload?standard=UBL&cif=RO10000008')
