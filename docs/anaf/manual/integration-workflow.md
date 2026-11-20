@@ -280,7 +280,7 @@ ANAF allows at most **10 downloads per day per specific `id`**.
 | `x-simulate-technical-error`    | Forces a technical server error response (HTTP 500)                       | `POST /upload`, `POST /uploadb2c`                                                   |
 | `x-simulate-xml-validation-error` | Simulates an XML schema parse failure (`SAXParseException`)             | `POST /upload`, `POST /uploadb2c`                                                   |
 | `x-simulate-executare-registry` | CIF not registered in the judicial enforcement registry                   | `POST /upload`, `POST /uploadb2c`                                                   |
-| `x-simulate-no-spv`             | Missing SPV authorization — returns empty message list                    | `GET /listaMesajeFactura`, `GET /listaMesajePaginatieFactura`, `GET /stareMesaj`    |
+| `x-simulate-no-spv`             | Missing SPV authorization — returns empty message list                    | `POST /upload`, `POST /uploadb2c`, `GET /listaMesajeFactura`, `GET /listaMesajePaginatieFactura`, `GET /stareMesaj` |
 | `x-simulate-wrong-certificate`  | Certificate mismatch error                                                | `GET /listaMesajeFactura`, `GET /listaMesajePaginatieFactura`                       |
 | `x-simulate-no-download-rights` | Missing download rights for the invoice ZIP                               | `GET /descarcare`                                                                   |
 | `x-simulate-invalid-xml`        | Returns an unparseable XML response for status polling                    | `GET /stareMesaj`                                                                   |

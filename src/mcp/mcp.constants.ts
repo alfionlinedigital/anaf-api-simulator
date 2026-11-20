@@ -29,6 +29,8 @@ export const CHEAT_HEADERS: CheatHeader[] = [
     name: 'x-simulate-no-spv',
     description: 'MOCK ONLY: Simulate missing SPV authorization (no messages returned). Do not use in production.',
     endpoints: [
+      'POST /prod/FCTEL/rest/upload',
+      'POST /prod/FCTEL/rest/uploadb2c',
       'GET /prod/FCTEL/rest/listaMesajeFactura',
       'GET /prod/FCTEL/rest/listaMesajePaginatieFactura',
       'GET /prod/FCTEL/rest/stareMesaj',

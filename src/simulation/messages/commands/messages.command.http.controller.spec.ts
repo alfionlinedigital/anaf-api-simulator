@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { UnauthorizedException } from '@nestjs/common';
 import { EventEmitter } from 'events';
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -168,6 +170,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'INVALID', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -182,6 +185,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -195,6 +199,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '123a' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -208,15 +213,20 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: 'aaa' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
       expectUploadXmlError(res, 'CIF introdus= aaa nu este un numar');
     });
 
-    it('nu aveti dreptul de incarcare — no SPV rights at all', async () => {
+    it('missing or invalid bearer token — HTTP 401 before the service runs', async () => {
       queryBus = createQueryBus({
-        ValidateAuthorizationHeaderQuery: { isValid: false },
+        ValidateAuthorizationHeaderQuery: {
+          isValid: false,
+          error: 'invalid_token',
+          errorDescription: 'Missing Authorization header.',
+        },
       });
       controller = new MessagesCommandHttpController(
         commandBus as never,
@@ -228,10 +238,27 @@ describe('MessagesCommandHttpController', () => {
 
       const res = createMockResponse();
       const req = createMockRequest('<Invoice/>');
+      await expect(
+        controller.upload(
+          { standard: 'UBL', cif: '10000008' },
+          undefined,
+          undefined, undefined, undefined, undefined,
+          undefined,
+          req as never,
+          res as never,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(res.body).toBeUndefined();
+    });
+
+    it('nu aveti dreptul de incarcare — no SPV rights at all (X-Simulate-No-Spv)', async () => {
+      const res = createMockResponse();
+      const req = createMockRequest('<Invoice/>');
       await controller.upload(
         { standard: 'UBL', cif: '10000008' },
-        undefined,
+        'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        'true',
         req as never,
         res as never,
       );
@@ -255,6 +282,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '1234' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -268,6 +296,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, 'true', undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -284,6 +313,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008', extern: 'NU' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -297,6 +327,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008', autofactura: 'NU' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -310,6 +341,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008', executare: 'NU' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -323,6 +355,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '1234' },
         'Bearer valid-token',
         undefined, undefined, undefined, 'true',
+        undefined,
         req as never,
         res as never,
       );
@@ -338,6 +371,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'RASP', cif: '1234' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -351,6 +385,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, 'true', undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -364,6 +399,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         'true', undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -383,6 +419,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -401,6 +438,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -423,6 +461,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'CII', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -436,6 +475,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: 'abc' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -449,6 +489,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'XML', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -462,6 +503,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -478,6 +520,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, 'true', undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -492,6 +535,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'RASP', cif: '5678' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -518,14 +562,16 @@ describe('MessagesCommandHttpController', () => {
 
       const res = createMockResponse();
       const req = createMockRequest('<Invoice/>');
-      await controller.upload(
-        { standard: 'UBL', cif: 'aaa' },
-        undefined,
-        undefined, undefined, undefined, undefined,
-        req as never,
-        res as never,
-      );
-      expectUploadXmlError(res, 'Nu exista niciun CIF pentru care sa aveti drept in SPV');
+      await expect(
+        controller.upload(
+          { standard: 'UBL', cif: 'aaa' },
+          undefined,
+          undefined, undefined, undefined, undefined,
+          undefined,
+          req as never,
+          res as never,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('non-numeric CIF takes precedence over invalid standard', async () => {
@@ -535,6 +581,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'INVALID', cif: 'abc' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -558,6 +605,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'XYZ', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -571,6 +619,7 @@ describe('MessagesCommandHttpController', () => {
         { standard: 'UBL', cif: '10000008' },
         'Bearer valid-token',
         undefined, undefined, undefined, undefined,
+        undefined,
         req as never,
         res as never,
       );
@@ -592,7 +641,8 @@ describe('MessagesCommandHttpController', () => {
           { standard: std, cif: '10000008' },
           'Bearer valid-token',
           undefined, undefined, undefined, undefined,
-          req as never,
+          undefined,
+        req as never,
           res as never,
         );
         expectUploadXmlSuccess(res);

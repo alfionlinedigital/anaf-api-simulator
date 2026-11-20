@@ -585,10 +585,22 @@ describe('AnafMockServer (e2e)', () => {
     expect(entries).toContain('semnatura.xml');
   });
 
-  it('returns ANAF XML error for upload without valid bearer token', async () => {
+  it('rejects upload without a bearer token with HTTP 401', async () => {
     const response = await request(app.getHttpServer())
       .post('/prod/FCTEL/rest/upload?standard=UBL&cif=RO10000008')
       .set('Content-Type', 'text/plain')
+      .send('<Invoice/>')
+      .expect(401);
+
+    expect(response.body.error).toBe('invalid_token');
+  });
+
+  it('returns ANAF XML error for upload by an identity without SPV rights', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/prod/FCTEL/rest/upload?standard=UBL&cif=RO10000008')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Content-Type', 'text/plain')
+      .set('X-Simulate-No-Spv', 'true')
       .send('<Invoice/>')
       .expect(200);
 

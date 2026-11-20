@@ -5,6 +5,7 @@ import {
   Query,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import {
@@ -67,8 +68,10 @@ export class MessagesCommandHttpController {
   @ApiHeader({ name: 'x-simulate-technical-error', required: false, description: 'Set to "true" to force a technical server error response (Returns HTTP 200 with XML ExecutionStatus=1, not a 500)' })
   @ApiHeader({ name: 'x-simulate-xml-validation-error', required: false, description: 'Set to "true" to simulate an XML schema validation failure (SAXParseException)' })
   @ApiHeader({ name: 'x-simulate-executare-registry', required: false, description: 'Set to "true" to simulate CIF not registered in the judicial enforcement registry' })
+  @ApiHeader({ name: 'x-simulate-no-spv', required: false, description: 'Set to "true" to simulate a valid token whose identity has no SPV rights (ExecutionStatus=1)' })
   @ApiResponse({ status: 200, description: 'XML response — ExecutionStatus="0" (success, includes index_incarcare) or ExecutionStatus="1" (error, includes error message)' })
   @ApiResponse({ status: 400, description: 'Bad Request — empty request body (JSON)' })
+  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid bearer token' })
   async upload(
     @Query() query: UploadInvoiceQueryDto,
     @Headers('authorization') authorizationHeader: string | undefined,
@@ -76,13 +79,14 @@ export class MessagesCommandHttpController {
     @Headers('x-simulate-technical-error') simulateTechnicalError: string | undefined,
     @Headers('x-simulate-xml-validation-error') simulateXmlValidation: string | undefined,
     @Headers('x-simulate-executare-registry') simulateExecutareRegistry: string | undefined,
+    @Headers('x-simulate-no-spv') simulateNoSpv: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     return this.handleUpload(
       query, authorizationHeader, simulateError,
       simulateTechnicalError, simulateXmlValidation, simulateExecutareRegistry,
-      req, res,
+      simulateNoSpv, req, res,
     );
   }
 
@@ -104,8 +108,10 @@ export class MessagesCommandHttpController {
   @ApiHeader({ name: 'x-simulate-technical-error', required: false, description: 'Set to "true" to force a technical server error response (Returns HTTP 200 with XML ExecutionStatus=1, not a 500)' })
   @ApiHeader({ name: 'x-simulate-xml-validation-error', required: false, description: 'Set to "true" to simulate an XML schema validation failure (SAXParseException)' })
   @ApiHeader({ name: 'x-simulate-executare-registry', required: false, description: 'Set to "true" to simulate CIF not registered in the judicial enforcement registry' })
+  @ApiHeader({ name: 'x-simulate-no-spv', required: false, description: 'Set to "true" to simulate a valid token whose identity has no SPV rights (ExecutionStatus=1)' })
   @ApiResponse({ status: 200, description: 'XML response — ExecutionStatus="0" (success) or ExecutionStatus="1" (error)' })
   @ApiResponse({ status: 400, description: 'Bad Request — empty request body (JSON)' })
+  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid bearer token' })
   async uploadB2c(
     @Query() query: UploadInvoiceQueryDto,
     @Headers('authorization') authorizationHeader: string | undefined,
@@ -113,13 +119,14 @@ export class MessagesCommandHttpController {
     @Headers('x-simulate-technical-error') simulateTechnicalError: string | undefined,
     @Headers('x-simulate-xml-validation-error') simulateXmlValidation: string | undefined,
     @Headers('x-simulate-executare-registry') simulateExecutareRegistry: string | undefined,
+    @Headers('x-simulate-no-spv') simulateNoSpv: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     return this.handleUpload(
       query, authorizationHeader, simulateError,
       simulateTechnicalError, simulateXmlValidation, simulateExecutareRegistry,
-      req, res,
+      simulateNoSpv, req, res,
     );
   }
 
@@ -130,17 +137,27 @@ export class MessagesCommandHttpController {
     simulateTechnicalError: string | undefined,
     simulateXmlValidation: string | undefined,
     simulateExecutareRegistry: string | undefined,
+    simulateNoSpv: string | undefined,
     req: Request,
     res: Response,
   ): Promise<void> {
     const now = new Date();
 
-    // Auth check — ANAF returns XML 200 on auth failure, not HTTP 401/403
+    // A missing or invalid bearer token is refused before the service runs (HTTP 401),
+    // as on every other e-Factura endpoint.
     const validation = await this.queryBus.execute(
       new ValidateAuthorizationHeaderQuery(authorizationHeader),
     );
 
     if (!validation.isValid) {
+      throw new UnauthorizedException({
+        error: validation.error,
+        error_description: validation.errorDescription,
+      });
+    }
+
+    // A valid token whose identity has no SPV rights — ANAF answers XML 200
+    if (simulateNoSpv?.toLowerCase() === 'true') {
       this.sendUploadError(res, now, 'Nu exista niciun CIF pentru care sa aveti drept in SPV');
       return;
     }
