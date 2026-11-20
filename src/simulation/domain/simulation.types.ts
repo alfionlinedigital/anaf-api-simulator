@@ -183,19 +183,28 @@ export namespace SimulationTypes {
 
   /**
    * ANAF paginated message list response — matches the real ANAF envelope.
-   * Uses `titlu`/`serial`/`cui`/`eroare` instead of `cod`/`message`.
+   * A successful page carries no `eroare`; errors and "no messages" answer
+   * {@link MessageListErrorResponse} instead.
    */
   export interface MessageListPaginationResponse {
     titlu: string;
     serial: string;
     cui: string;
-    eroare: string | null;
     mesaje: MessageListEntry[];
     numar_inregistrari_in_pagina: number;
     numar_total_inregistrari_per_pagina: number;
     numar_total_inregistrari: number;
     numar_total_pagini: number;
     index_pagina_curenta: number;
+  }
+
+  /**
+   * ANAF's HTTP 200 answer for a message list it cannot return, including
+   * "Nu exista mesaje in intervalul selectat".
+   */
+  export interface MessageListErrorResponse {
+    eroare: string;
+    titlu: string;
   }
 
   /**

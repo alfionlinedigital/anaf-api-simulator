@@ -277,7 +277,7 @@ describe('TrafficGeneratorService', () => {
         'P',
       );
 
-      expect(result.eroare).toBeNull();
+      expect(result).not.toHaveProperty('eroare');
       expect(result.titlu).toBeDefined();
       expect(result.numar_total_inregistrari).toBe(2);
       expect(result.numar_total_pagini).toBe(1);
@@ -324,7 +324,7 @@ describe('TrafficGeneratorService', () => {
         'P',
       );
 
-      expect(result.eroare).toBeNull();
+      expect(result).not.toHaveProperty('eroare');
       expect(result.titlu).toContain('Lista Mesaje');
       expect(result.mesaje).toHaveLength(0);
       expect(result.numar_total_inregistrari).toBe(0);

@@ -140,7 +140,10 @@ export class MessagesQueryHttpController {
     @Query() query: ListaMesajePaginatieFacturaQueryDto,
     @Headers('authorization') authorizationHeader: string | undefined,
     @Headers('x-simulate-wrong-certificate') wrongCertificateHeader?: string,
-  ): Promise<SimulationTypes.MessageListPaginationResponse> {
+  ): Promise<
+    | SimulationTypes.MessageListPaginationResponse
+    | SimulationTypes.MessageListErrorResponse
+  > {
     const auth = await this.assertAuthorized(authorizationHeader);
     this.assertOwnershipAccess(auth, query.cif);
 
@@ -152,15 +155,26 @@ export class MessagesQueryHttpController {
       });
     }
 
-    return this.queryBus.execute(
-      new ListMessagesPaginatedQuery(
-        query.cif,
-        query.startTime,
-        query.endTime,
-        query.pagina,
-        query.filtru,
-      ),
-    );
+    const result: SimulationTypes.MessageListPaginationResponse =
+      await this.queryBus.execute(
+        new ListMessagesPaginatedQuery(
+          query.cif,
+          query.startTime,
+          query.endTime,
+          query.pagina,
+          query.filtru,
+        ),
+      );
+
+    // ANAF answers an empty interval with an eroare note, not an empty page
+    if (result.numar_total_inregistrari === 0) {
+      return {
+        eroare: 'Nu exista mesaje in intervalul selectat',
+        titlu: 'Lista Mesaje',
+      };
+    }
+
+    return result;
   }
 
   @Get('stareMesaj')
@@ -206,13 +220,15 @@ export class MessagesQueryHttpController {
     );
 
     if (!result) {
-      // Real ANAF always returns HTTP 200 — status conveyed via XML stare attribute
+      // ANAF answers a query error with HTTP 200 and an <Errors> element, no stare
+      const xml = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<header xmlns="mfp:anaf:dgti:efactura:stareMesajFactura:v1">',
+        `  <Errors errorMessage="Nu exista factura cu id_incarcare= ${this.escapeXmlAttr(query.id_incarcare)}"/>`,
+        '</header>',
+      ].join('\n');
       response!.setHeader('Content-Type', 'application/xml');
-      response!.status(200).send(
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
-        '<header xmlns="mfp:anaf:dgti:efactura:stareMesajFactura:v1"\n' +
-        '  stare="in prelucrare"/>',
-      );
+      response!.status(200).send(xml);
       return;
     }
 

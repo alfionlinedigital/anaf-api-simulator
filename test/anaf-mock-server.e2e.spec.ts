@@ -621,14 +621,37 @@ describe('AnafMockServer (e2e)', () => {
     expect(response.text).toContain('errorMessage=');
   });
 
-  it('returns 200 XML with stare="in prelucrare" for unknown upload index in stareMesaj', async () => {
-    // Real ANAF always returns HTTP 200 — status conveyed via XML stare attribute
+  it('returns ANAF XML error without stare for unknown upload index in stareMesaj', async () => {
     const response = await request(app.getHttpServer())
       .get('/prod/FCTEL/rest/stareMesaj?id_incarcare=99999999999')
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
-    expect(response.text).toContain('stare="in prelucrare"');
+    expect(response.text).toContain(
+      'errorMessage="Nu exista factura cu id_incarcare= 99999999999"',
+    );
+    expect(response.text).not.toContain('stare=');
+  });
+
+  it('answers an empty paginated interval with the ANAF eroare note', async () => {
+    const now = Date.now();
+
+    const response = await request(app.getHttpServer())
+      .get('/prod/FCTEL/rest/listaMesajePaginatieFactura')
+      .query({
+        cif: 'RO10000008',
+        startTime: String(now - 1_000),
+        endTime: String(now),
+        pagina: '1',
+        filtru: 'R',
+      })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      eroare: 'Nu exista mesaje in intervalul selectat',
+      titlu: 'Lista Mesaje',
+    });
   });
 
   it('returns paginated message list with ANAF pagination fields', async () => {
@@ -647,7 +670,7 @@ describe('AnafMockServer (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
 
-    expect(response.body.eroare).toBeNull();
+    expect(response.body).not.toHaveProperty('eroare');
     expect(response.body).toHaveProperty('titlu');
     expect(response.body).toHaveProperty('serial');
     expect(response.body).toHaveProperty('cui');
