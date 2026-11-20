@@ -552,6 +552,54 @@ describe('AnafMockServer (e2e)', () => {
     expect(entries).toContain('semnatura.xml');
   });
 
+  it('completes the B2C upload lifecycle: uploadb2c → stareMesaj → descarcare', async () => {
+    const invoiceXml = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">',
+      '  <cbc:ID xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">TEST-B2C-001</cbc:ID>',
+      '</Invoice>',
+    ].join('\n');
+
+    const uploadResponse = await request(app.getHttpServer())
+      .post('/prod/FCTEL/rest/uploadb2c?standard=UBL&cif=RO10000008')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Content-Type', 'text/plain')
+      .send(invoiceXml)
+      .expect(200);
+
+    expect(uploadResponse.headers['content-type']).toContain('application/xml');
+    expect(uploadResponse.text).toContain('ExecutionStatus="0"');
+
+    const indexMatch = uploadResponse.text.match(/index_incarcare="(\d+)"/);
+    expect(indexMatch).toBeTruthy();
+
+    const statusResponse = await request(app.getHttpServer())
+      .get(`/prod/FCTEL/rest/stareMesaj?id_incarcare=${indexMatch![1]}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+
+    expect(statusResponse.text).toContain('stare="ok"');
+    const idDescarcareMatch = statusResponse.text.match(/id_descarcare="([^"]+)"/);
+    expect(idDescarcareMatch).toBeTruthy();
+
+    const downloadResponse = await request(app.getHttpServer())
+      .get(`/prod/FCTEL/rest/descarcare?id=${encodeURIComponent(idDescarcareMatch![1])}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .buffer(true)
+      .parse(binaryParser)
+      .expect(200);
+
+    expect(downloadResponse.headers['content-type']).toContain('application/zip');
+  });
+
+  it('rejects uploadb2c without valid bearer token', async () => {
+    await request(app.getHttpServer())
+      .post('/prod/FCTEL/rest/uploadb2c?standard=UBL&cif=RO10000008')
+      .set('Content-Type', 'text/plain')
+      .send('<Invoice/>')
+      .expect(401);
+  });
+
   it('rejects upload without valid bearer token', async () => {
     await request(app.getHttpServer())
       .post('/prod/FCTEL/rest/upload?standard=UBL&cif=RO10000008')

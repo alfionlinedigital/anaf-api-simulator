@@ -43,13 +43,15 @@ export class MessagesCommandHttpController {
 
   /**
    * Accepts a raw XML invoice upload and returns an ANAF-format XML response.
+   * `uploadb2c` is ANAF's route for invoices to individuals (B2C); it takes the same
+   * request and answers the same way.
    * @param query Value for query.
    * @param authorizationHeader Value for authorizationHeader.
    * @param simulateError Value for simulateError.
    * @param req Value for req.
    * @param res Value for res.
    */
-  @Post('upload')
+  @Post(['upload', 'uploadb2c'])
   async upload(
     @Query() query: UploadInvoiceQueryDto,
     @Headers('authorization') authorizationHeader: string | undefined,
